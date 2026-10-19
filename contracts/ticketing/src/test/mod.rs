@@ -13,6 +13,8 @@ use soroban_sdk::{
     Address, Bytes, Env, IntoVal, String, Vec,
 };
 
+mod approvals;
+mod auction;
 mod auth;
 mod auth_matrix;
 mod batch_issuance;
@@ -27,9 +29,11 @@ mod guards;
 pub mod helpers;
 mod metadata;
 mod multi_use;
+mod offers;
 mod organizer_allowlist;
 mod organizer_listing;
 mod owner_index;
+mod platform_fee;
 mod proptests;
 mod reentry;
 mod resale;

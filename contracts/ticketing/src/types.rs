@@ -213,6 +213,40 @@ pub struct GiftClaim {
     pub expires_at: u64,
 }
 
+/// A timed auction for a ticket, started with `start_auction` (issue #105).
+/// The highest bid is held by the contract until the auction settles, or
+/// until its bidder is outbid and refunded.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Auction {
+    /// Owner who started the auction. The ticket must still belong to them
+    /// when the auction settles.
+    pub seller: Address,
+    /// Lowest accepted bid, and the minimum opening bid.
+    pub reserve_price: i128,
+    /// Ledger timestamp at which bidding closes and the auction can settle.
+    pub ends_at: u64,
+    /// Bidder currently holding the highest bid, or `None` before the first bid.
+    pub highest_bidder: Option<Address>,
+    /// Amount of the highest bid, held by the contract. Zero before the first bid.
+    pub highest_bid: i128,
+}
+
+/// A buyer's offer on a listed ticket, held in escrow until it is accepted or
+/// cancelled (issue #106).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Offer {
+    /// Owner the offer was made to. Only that owner can accept it, so an offer
+    /// cannot be settled after the ticket has changed hands.
+    pub seller: Address,
+    /// Offered price, held by the contract.
+    pub amount: i128,
+    /// Payment token the offer was escrowed in. Stored so a cancellation can
+    /// refund it even if the ticket record no longer exists.
+    pub token: Address,
+}
+
 /// A payment token change that has been proposed but not yet applied.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -295,6 +329,19 @@ pub enum DataKey {
     /// Optional issuance cap for one of an event's tiers (issue #93). Absent
     /// means the tier is uncapped.
     TierCapacity(u64, String),
+    /// Platform fee taken from each primary sale, in basis points (issue #104).
+    /// Absent means no fee.
+    PlatformFeeBps,
+    /// Funds the contract holds for resale bids and offers, across all tickets
+    /// (issues #105, #106). Blocks a payment token change while non-zero.
+    OutstandingResaleFunds,
+    /// Timed auction for a ticket, keyed by ticket id (issue #105).
+    Auction(u64),
+    /// Escrowed offer from one buyer on one ticket (issue #106).
+    Offer(u64, Address),
+    /// Operator approved to move a ticket, keyed by ticket id (issue #107).
+    /// Absent means no operator is approved.
+    TicketApproval(u64),
 }
 
 // Keep the persistent encoding beside the public and stored ticket types.
