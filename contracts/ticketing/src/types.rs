@@ -280,6 +280,31 @@ pub struct PendingPaymentToken {
 }
 
 /// Storage keys for all contract state.
+///
+/// # Index naming convention
+///
+/// Index-style variants follow three shapes so a reader can tell how a key
+/// is scanned without looking up its call sites:
+///
+/// 1. **Ordered list slots** — `<Subject>At(subject_id, index)` returns the
+///    id stored at a zero-based position, with a companion
+///    `<Subject>Count(subject_id)` or `<Subject>Events(subject_id)` giving
+///    the list length. Examples: `OwnerTicketAt` / `OwnerTicketCount`,
+///    `OrganizerEventAt` / `OrganizerEvents`.
+/// 2. **Reverse position lookup** — `<Subject>Pos(subject_id)` maps an
+///    element back to its slot in the owner's list so removal is constant
+///    time. Example: `TicketOwnerPos`.
+/// 3. **Composite per-entity keys** — `<Subject>(owner_id, child_id)`
+///    (or `<Subject>(event_id, label)` for tier- and policy-scoped data)
+///    stores one entry per (parent, child) pair without a list walk.
+///    Examples: `TierPrice(event_id, tier)`, `AllowlistMember(event_id,
+///    member)`, `Offer(ticket_id, buyer)`.
+///
+/// When adding a new index, pick the shape that matches how it is read —
+/// paged iteration uses (1), O(1) removal from a list uses (2), and
+/// membership or per-child configuration uses (3). Do not rename existing
+/// variants: the XDR encoding of each variant name is part of the storage
+/// ABI. The full storage reference lives in `docs/STORAGE_LAYOUT.md`.
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -364,6 +389,26 @@ pub enum DataKey {
     /// Operator approved to move a ticket, keyed by ticket id (issue #107).
     /// Absent means no operator is approved.
     TicketApproval(u64),
+    /// Zones a tier may enter at check-in, keyed by event id and tier name
+    /// (issue #80). Absent means the tier is unrestricted.
+    TierZones(u64, String),
+    /// Presence marks a delegated check-in signer for an event (issue #89),
+    /// keyed by event id and signer address.
+    CheckInSigner(u64, Address),
+    /// Primary sale window `(sale_start, sale_end)` in ledger seconds for an
+    /// event (issue #94). Absent means the sale is always open.
+    SaleWindow(u64),
+    /// Bounded list of previous owners of a ticket, oldest first (issue #82).
+    /// The current owner is not included.
+    OwnerHistory(u64),
+    /// Contract-wide pause flag (instance storage). Absent means unpaused.
+    Paused,
+    /// Presence marks an allowlisted member for an event's presale window,
+    /// keyed by event id and member address.
+    AllowlistMember(u64, Address),
+    /// Number of primary purchases a wallet has made for an event, keyed by
+    /// event id and wallet address. Backs the optional `max_per_wallet` cap.
+    WalletPurchaseCount(u64, Address),
 }
 
 // Keep the persistent encoding beside the public and stored ticket types.

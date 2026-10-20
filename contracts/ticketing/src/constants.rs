@@ -11,7 +11,12 @@ pub(crate) const LEDGER_BUMP: u32 = 535_679;
 pub(crate) const LEDGER_THRESHOLD: u32 = 500_000;
 
 /// Maximum number of tickets accepted by the batch entry points.
-pub const MAX_BATCH_SIZE: u32 = 50;
+///
+/// 35 keeps a full `issue_tickets` batch inside the network's transaction
+/// write limit (200): each mint performs five persistent writes — the ticket
+/// record, the owner's balance counter, and the three owner-index entries —
+/// so 35 × 5 = 175 writes plus a small per-call overhead stays under 200.
+pub const MAX_BATCH_SIZE: u32 = 35;
 
 /// Ledgers that must pass between proposing and applying a payment token
 /// change (~1 day at 5s/ledger).

@@ -1,6 +1,7 @@
 # Docs index
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — storage layout and auth model
+- [STORAGE_LAYOUT.md](STORAGE_LAYOUT.md) — every DataKey, its type, storage kind and TTL (issue #50)
 - [CONTRACT_API.md](CONTRACT_API.md) — function reference
 - [ERRORS.md](ERRORS.md) — full error table with retry semantics
 - [STORAGE_TTL.md](STORAGE_TTL.md) — storage TTL/archival policy

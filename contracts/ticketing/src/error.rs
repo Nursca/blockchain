@@ -130,16 +130,6 @@ pub enum Error {
     TierSoldOut = 59,
     /// The max uses is zero, or below the number of uses already recorded (issue #74).
     InvalidMaxUses = 60,
-    /// The ticket's tier may not enter the zone being checked in at (issue #80).
-    ZoneNotAllowed = 61,
-    /// Too many zones, or a zone label is empty or too long (issue #80).
-    InvalidZones = 62,
-    /// The primary sale has not opened yet (issue #94).
-    SaleNotStarted = 63,
-    /// The primary sale has closed (issue #94).
-    SaleEnded = 64,
-    /// The sale window ends at or before it starts (issue #94).
-    InvalidSaleWindow = 65,
     /// A gift claim already exists for the ticket and has not yet been claimed or expired.
     GiftClaimAlreadyExists = 61,
     /// The platform fee is above 100% (10_000 bps) (issue #104).
@@ -166,4 +156,24 @@ pub enum Error {
     NotApproved = 72,
     /// The payment token cannot change while resale bids or offers are held (issues #105, #106).
     ResaleFundsOutstanding = 73,
+    /// The ticket's tier may not enter the zone being checked in at (issue #80).
+    ZoneNotAllowed = 74,
+    /// Too many zones, or a zone label is empty or too long (issue #80).
+    InvalidZones = 75,
+    /// The primary sale has not opened yet (issue #94).
+    SaleNotStarted = 76,
+    /// The primary sale has closed (issue #94).
+    SaleEnded = 77,
+    /// The sale window ends at or before it starts (issue #94).
+    InvalidSaleWindow = 78,
+    /// The contract is paused by the admin, so state-changing entry points are rejected.
+    ContractPaused = 79,
+    /// The ticket has already been refunded through `refund_primary`.
+    AlreadyRefunded = 80,
+    /// The event has no refund window, or the ticket's refund window has elapsed.
+    RefundWindowExpired = 81,
+    /// The buyer is not on the event's presale allowlist during the presale window.
+    NotOnAllowlist = 82,
+    /// The wallet has already purchased the event's maximum per-wallet tickets.
+    PurchaseLimitExceeded = 83,
 }

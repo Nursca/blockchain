@@ -17,10 +17,11 @@ pub use constants::{
 use constants::{LEDGER_BUMP, LEDGER_THRESHOLD};
 pub use error::Error;
 pub use events::{
-    AuctionSettled, AuctionStarted, BidPlaced, ContractInitialized, EventCancelled, OfferAccepted,
-    OfferCancelled, OfferMade, OrganizerApproved, OrganizerRevoked, PaymentTokenChanged,
-    PaymentTokenProposed, PlatformFeeUpdated, PurchaseThrottleUpdated, TicketCheckedIn,
-    TicketIssued, TicketTransferred,
+    AuctionSettled, AuctionStarted, BidPlaced, ContractInitialized, EventCancelled, EventCreated,
+    ListingCancelled, OfferAccepted, OfferCancelled, OfferMade, OrganizerApproved,
+    OrganizerRevoked, PaymentTokenChanged, PaymentTokenProposed, PlatformFeeUpdated, PrimarySale,
+    PurchaseThrottleUpdated, TicketCheckedIn, TicketIssued, TicketListed, TicketResold,
+    TicketTransferred,
 };
 pub use types::{
     Auction, Category, DataKey, Event, EventParams, GiftClaim, Offer, PendingPaymentToken,
@@ -293,7 +294,9 @@ impl TicketingContract {
         if env.storage().persistent().has(&key) {
             return Err(Error::EventAlreadyExists);
         }
-        if let (Some(presale_starts), Some(presale_ends)) = (params.presale_starts_at, params.presale_ends_at) {
+        if let (Some(presale_starts), Some(presale_ends)) =
+            (params.presale_starts_at, params.presale_ends_at)
+        {
             if presale_starts >= presale_ends || presale_ends > params.starts_at {
                 return Err(Error::InvalidEventTime);
             }
@@ -987,6 +990,7 @@ impl TicketingContract {
         let ticket_id = Self::mint(&env, event_id, buyer.clone(), tier, seat, price);
         Self::increment_tickets_issued(&env, event_id, 1);
         Self::record_purchase(&env, &buyer);
+        Self::increment_wallet_purchase_count(&env, event_id, &buyer);
         PrimarySale {
             ticket_id,
             buyer,
@@ -1577,11 +1581,12 @@ impl TicketingContract {
         if refund && ticket.original_price > 0 {
             let token_client =
                 token::Client::new(&env, &Self::payment_token_for_event(&env, &event)?);
-            let refund_source = if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
-                env.current_contract_address()
-            } else {
-                organizer.clone()
-            };
+            let refund_source =
+                if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
+                    env.current_contract_address()
+                } else {
+                    organizer.clone()
+                };
             token_client.transfer(&refund_source, &ticket.owner, &ticket.original_price);
             if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
                 event.escrow_balance -= ticket.original_price;
@@ -1590,9 +1595,10 @@ impl TicketingContract {
                     .instance()
                     .get::<_, i128>(&DataKey::OutstandingEscrow)
                     .unwrap_or(0);
-                env.storage()
-                    .instance()
-                    .set(&DataKey::OutstandingEscrow, &(current_escrow - ticket.original_price));
+                env.storage().instance().set(
+                    &DataKey::OutstandingEscrow,
+                    &(current_escrow - ticket.original_price),
+                );
             }
         }
         ticket.status = TicketStatus::Revoked;
@@ -1655,7 +1661,9 @@ impl TicketingContract {
         if ticket.status != TicketStatus::Used {
             return Err(Error::TicketNotUsed);
         }
-        let burnable_from = event.starts_at.saturating_add(USED_TICKET_RETENTION_SECONDS);
+        let burnable_from = event
+            .starts_at
+            .saturating_add(USED_TICKET_RETENTION_SECONDS);
         if env.ledger().timestamp() < burnable_from {
             return Err(Error::RetentionPeriodNotElapsed);
         }
@@ -1859,6 +1867,7 @@ impl TicketingContract {
 
         // --- effects: settle state before any untrusted external call. ---
         let (royalty, seller_amount) = Self::split_resale_price(&event, ticket.resale_price)?;
+        let price = ticket.resale_price;
         let seller = ticket.owner.clone();
         Self::move_owner_balance(&env, ticket_id, &seller, &buyer);
         ticket.owner = buyer.clone();
@@ -2741,6 +2750,7 @@ impl TicketingContract {
         match ticket.status {
             TicketStatus::Used => Err(Error::AlreadyUsed),
             TicketStatus::Revoked => Err(Error::Revoked),
+            TicketStatus::Refunded => Err(Error::AlreadyRefunded),
             _ => Ok(()),
         }
     }
@@ -3209,7 +3219,9 @@ impl TicketingContract {
             let share = if i as u32 == last {
                 royalty - paid
             } else {
-                royalty.checked_mul(bps as i128).ok_or(Error::MathOverflow)?
+                royalty
+                    .checked_mul(bps as i128)
+                    .ok_or(Error::MathOverflow)?
                     / event.royalty_bps as i128
             };
             paid += share;
@@ -3241,9 +3253,7 @@ impl TicketingContract {
     /// A ticket is expired from the instant `ticket_expires_at` is reached.
     fn ensure_not_expired(env: &Env, event: &Event) -> Result<(), Error> {
         match event.ticket_expires_at {
-            Some(expires_at) if env.ledger().timestamp() >= expires_at => {
-                Err(Error::TicketExpired)
-            }
+            Some(expires_at) if env.ledger().timestamp() >= expires_at => Err(Error::TicketExpired),
             _ => Ok(()),
         }
     }
@@ -3388,21 +3398,25 @@ impl TicketingContract {
     }
 
     pub fn is_paused(env: Env) -> bool {
-        env.storage().instance().get(&DataKey::Paused).unwrap_or(false)
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
     }
 
     fn require_not_paused(env: &Env) -> Result<(), Error> {
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::ContractPaused);
         }
         Ok(())
     }
 
-    pub fn refund_primary(
-        env: Env,
-        buyer: Address,
-        ticket_id: u64,
-    ) -> Result<(), Error> {
+    pub fn refund_primary(env: Env, buyer: Address, ticket_id: u64) -> Result<(), Error> {
         Self::extend_instance_ttl(&env);
         buyer.require_auth();
         Self::require_not_paused(&env)?;
@@ -3428,12 +3442,14 @@ impl TicketingContract {
         Self::remove_gift_claim(&env, ticket_id);
         Self::save_ticket(&env, ticket_id, &ticket);
         if ticket.original_price > 0 {
-            let token_client = token::Client::new(&env, &Self::payment_token_for_event(&env, &event)?);
-            let refund_source = if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
-                env.current_contract_address()
-            } else {
-                event.organizer.clone()
-            };
+            let token_client =
+                token::Client::new(&env, &Self::payment_token_for_event(&env, &event)?);
+            let refund_source =
+                if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
+                    env.current_contract_address()
+                } else {
+                    event.organizer.clone()
+                };
             token_client.transfer(&refund_source, &buyer, &ticket.original_price);
             if event.escrow_enabled && event.escrow_balance >= ticket.original_price {
                 event.escrow_balance -= ticket.original_price;
@@ -3442,9 +3458,10 @@ impl TicketingContract {
                     .instance()
                     .get::<_, i128>(&DataKey::OutstandingEscrow)
                     .unwrap_or(0);
-                env.storage()
-                    .instance()
-                    .set(&DataKey::OutstandingEscrow, &(current_escrow - ticket.original_price));
+                env.storage().instance().set(
+                    &DataKey::OutstandingEscrow,
+                    &(current_escrow - ticket.original_price),
+                );
                 Self::save_event(&env, ticket.event_id, &event);
             }
         }
@@ -3465,7 +3482,9 @@ impl TicketingContract {
         for member in members.iter() {
             let key = DataKey::AllowlistMember(event_id, member);
             env.storage().persistent().set(&key, &true);
-            env.storage().persistent().extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
         }
         Ok(())
     }
@@ -3481,28 +3500,48 @@ impl TicketingContract {
         Self::require_not_paused(&env)?;
         Self::require_organizer(&env, event_id, &organizer)?;
         for member in members.iter() {
-            env.storage().persistent().remove(&DataKey::AllowlistMember(event_id, member));
+            env.storage()
+                .persistent()
+                .remove(&DataKey::AllowlistMember(event_id, member));
         }
         Ok(())
     }
 
     pub fn is_on_allowlist(env: Env, event_id: u64, member: Address) -> bool {
-        env.storage().persistent().has(&DataKey::AllowlistMember(event_id, member))
+        env.storage()
+            .persistent()
+            .has(&DataKey::AllowlistMember(event_id, member))
     }
 
-    fn enforce_presale_rules(env: &Env, event_id: u64, buyer: &Address, event: &Event) -> Result<(), Error> {
-        if let (Some(presale_starts), Some(presale_ends)) = (event.presale_starts_at, event.presale_ends_at) {
+    fn enforce_presale_rules(
+        env: &Env,
+        event_id: u64,
+        buyer: &Address,
+        event: &Event,
+    ) -> Result<(), Error> {
+        if let (Some(presale_starts), Some(presale_ends)) =
+            (event.presale_starts_at, event.presale_ends_at)
+        {
             let now = env.ledger().timestamp();
-            if now >= presale_starts && now < presale_ends {
-                if !env.storage().persistent().has(&DataKey::AllowlistMember(event_id, buyer.clone())) {
-                    return Err(Error::NotOnAllowlist);
-                }
+            if now >= presale_starts
+                && now < presale_ends
+                && !env
+                    .storage()
+                    .persistent()
+                    .has(&DataKey::AllowlistMember(event_id, buyer.clone()))
+            {
+                return Err(Error::NotOnAllowlist);
             }
         }
         Ok(())
     }
 
-    fn enforce_wallet_limit(env: &Env, event_id: u64, buyer: &Address, event: &Event) -> Result<(), Error> {
+    fn enforce_wallet_limit(
+        env: &Env,
+        event_id: u64,
+        buyer: &Address,
+        event: &Event,
+    ) -> Result<(), Error> {
         if let Some(max_per_wallet) = event.max_per_wallet {
             let count = Self::get_wallet_purchase_count(env, event_id, buyer);
             if count >= max_per_wallet {
@@ -3522,16 +3561,24 @@ impl TicketingContract {
     fn increment_wallet_purchase_count(env: &Env, event_id: u64, wallet: &Address) {
         let key = DataKey::WalletPurchaseCount(event_id, wallet.clone());
         let count = env.storage().persistent().get(&key).unwrap_or(0u32);
-        env.storage().persistent().set(&key, &count.saturating_add(1));
-        env.storage().persistent().extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .persistent()
+            .set(&key, &count.saturating_add(1));
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
     }
 
     fn decrement_wallet_purchase_count(env: &Env, event_id: u64, wallet: &Address) {
         let key = DataKey::WalletPurchaseCount(event_id, wallet.clone());
         let count: u32 = env.storage().persistent().get(&key).unwrap_or(0);
         if count > 0 {
-            env.storage().persistent().set(&key, &count.saturating_sub(1));
-            env.storage().persistent().extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+            env.storage()
+                .persistent()
+                .set(&key, &count.saturating_sub(1));
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
         }
     }
 }

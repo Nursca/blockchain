@@ -5,7 +5,7 @@ Every fallible entry point of the `ticketing` contract returns
 [`contracts/ticketing/src/error.rs`](../contracts/ticketing/src/error.rs)
 with an explicit `#[repr(u32)]` discriminant, so every variant has a
 **stable numeric code** that integrators can branch on. The enum runs
-from `1` to `73` — code `0` is never produced by this
+from `1` to `83` — code `0` is never produced by this
 contract.
 
 This page is the canonical error reference. Where another document shows
@@ -56,7 +56,7 @@ diagnostic transaction.
 | 25 | `InvalidSecret` | `sha256(secret)` does not equal the stored `secret_hash` |
 | 26 | `InvalidExpiry` | `expires_at` is not in the future |
 | 27 | `EmptyBatch` | A batch entry point was called with an empty `ticket_ids` vector |
-| 28 | `BatchTooLarge` | A batch entry point was called with more than `MAX_BATCH_SIZE` (50) ids |
+| 28 | `BatchTooLarge` | A batch entry point was called with more than `MAX_BATCH_SIZE` (35) ids |
 | 29 | `InvalidPaymentToken` | The supplied address failed the `decimals()` probe, so it is not a SEP-41 token contract |
 | 30 | `NoPendingPaymentToken` | `apply_payment_token` was called with no change pending |
 | 31 | `TimelockNotElapsed` | The current ledger sequence is still below the pending change's `apply_after_ledger` |
@@ -86,7 +86,10 @@ diagnostic transaction.
 | 55 | `InvalidTicketExpiry` | `set_event_ticket_expiry` was given a time that is not in the future (issue #76) |
 | 56 | `ReentryNotAllowed` | `pass_out` was called on an event with `max_reentries` of zero (issue #78) |
 | 57 | `ReentryLimitReached` | `pass_out` was called after the ticket used all of its re-entries (issue #78) |
+| 58 | `EventCancelled` | The event was cancelled by its organizer, so it can no longer issue, sell or list tickets, and cannot be cancelled again (issue #91) |
+| 59 | `TierSoldOut` | The tier has reached its issuance cap (issue #93) |
 | 60 | `InvalidMaxUses` | `set_ticket_max_uses` was given zero, or a value below the ticket's recorded uses (issue #74) |
+| 61 | `GiftClaimAlreadyExists` | `create_gift_claim` was called while a live claim already exists for the ticket |
 | 62 | `InvalidPlatformFee` | `set_platform_fee_bps` was given a fee above 10_000 bps (issue #104) |
 | 63 | `AuctionNotFound` | `place_bid`, `settle_auction` or `get_auction` was called for a ticket with no open auction (issue #105) |
 | 64 | `AuctionEnded` | `place_bid` was called at or after the auction's `ends_at` (issue #105) |
@@ -99,6 +102,16 @@ diagnostic transaction.
 | 71 | `OfferAlreadyExists` | `make_offer` was called by a buyer who already has an open offer on the ticket (issue #106) |
 | 72 | `NotApproved` | `transfer_from` was called by an address that is not the ticket's approved operator (issue #107) |
 | 73 | `ResaleFundsOutstanding` | `apply_payment_token` was called while resale bids or offers are still held (issues #105, #106) |
+| 74 | `ZoneNotAllowed` | The ticket's tier may not enter the zone being checked in at (issue #80) |
+| 75 | `InvalidZones` | `set_tier_zones` was given more than `MAX_TIER_ZONES` zones, or a zone label is empty or too long (issue #80) |
+| 76 | `SaleNotStarted` | `purchase_primary` was called before the event's configured `sale_start` (issue #94) |
+| 77 | `SaleEnded` | `purchase_primary` was called at or after the event's configured `sale_end` (issue #94) |
+| 78 | `InvalidSaleWindow` | `set_event_sale_window` was given a `sale_end` that is not after `sale_start` (issue #94) |
+| 79 | `ContractPaused` | The admin has paused the contract; state-changing entry points are rejected until `unpause` |
+| 80 | `AlreadyRefunded` | The ticket has already been refunded through `refund_primary`, or a terminal-status ticket was mutated |
+| 81 | `RefundWindowExpired` | `refund_primary` was called after the event's refund window elapsed, or the event set no refund window |
+| 82 | `NotOnAllowlist` | A presale purchase was attempted by a wallet that is not on the event's allowlist |
+| 83 | `PurchaseLimitExceeded` | A primary purchase would exceed the event's optional `max_per_wallet` cap |
 
 ### Grouping
 

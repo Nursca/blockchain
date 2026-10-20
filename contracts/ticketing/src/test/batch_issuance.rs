@@ -39,7 +39,10 @@ fn issue_tickets_mints_one_ticket() {
     let ids = client.issue_tickets(&organizer, &1, &recipients);
 
     assert_eq!(ids.len(), 1);
-    assert_eq!(client.get_ticket(&ids.get(0).unwrap()).owner, owners.get(0).unwrap());
+    assert_eq!(
+        client.get_ticket(&ids.get(0).unwrap()).owner,
+        owners.get(0).unwrap()
+    );
     assert_eq!(client.get_event(&1).tickets_issued, 1);
 }
 
@@ -71,7 +74,9 @@ fn issue_tickets_accepts_a_full_batch_at_max_size() {
 
     assert_eq!(ids.len(), MAX_BATCH_SIZE);
     assert_eq!(
-        client.get_ticket(&ids.get(MAX_BATCH_SIZE - 1).unwrap()).owner,
+        client
+            .get_ticket(&ids.get(MAX_BATCH_SIZE - 1).unwrap())
+            .owner,
         owners.get(MAX_BATCH_SIZE - 1).unwrap()
     );
     assert_eq!(client.get_event(&1).tickets_issued, MAX_BATCH_SIZE as u64);

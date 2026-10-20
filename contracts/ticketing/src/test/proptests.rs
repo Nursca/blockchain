@@ -236,7 +236,7 @@ proptest! {
                         TicketStatus::Used => {
                             prop_assert_eq!(res, Err(Ok(Error::AlreadyUsed)));
                         }
-                        TicketStatus::Revoked => {
+                        TicketStatus::Revoked | TicketStatus::Refunded => {
                             prop_assert_eq!(res, Err(Ok(Error::Revoked)));
                         }
                     }
@@ -253,7 +253,7 @@ proptest! {
                         TicketStatus::Used => {
                             prop_assert_eq!(res, Err(Ok(Error::AlreadyUsed)));
                         }
-                        TicketStatus::Revoked => {
+                        TicketStatus::Revoked | TicketStatus::Refunded => {
                             prop_assert_eq!(res, Err(Ok(Error::Revoked)));
                         }
                     }
@@ -306,7 +306,7 @@ proptest! {
                         TicketStatus::Used => {
                             prop_assert_eq!(res, Err(Ok(Error::AlreadyUsed)));
                         }
-                        TicketStatus::Revoked => {
+                        TicketStatus::Revoked | TicketStatus::Refunded => {
                             prop_assert_eq!(res, Err(Ok(Error::Revoked)));
                         }
                     }
@@ -323,6 +323,9 @@ proptest! {
                         TicketStatus::Revoked => {
                             // Issue #130: cannot revoke an already revoked ticket
                             prop_assert_eq!(res, Err(Ok(Error::Revoked)));
+                        }
+                        TicketStatus::Refunded => {
+                            prop_assert_eq!(res, Err(Ok(Error::AlreadyRefunded)));
                         }
                     }
                 }
