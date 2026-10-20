@@ -18,13 +18,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/).
   for the dependency versioning policy and upgrade procedure.
 
 ### Added
-- Marketplace and sale events for indexers. `create_event` publishes
-  `EventCreated` (`organizer` and `event_id` topics) (#119). `purchase_primary`
-  publishes `PrimarySale` (`ticket_id` topic, `buyer`, `price`) (#118).
-  `list_for_resale` publishes `TicketListed` and `cancel_resale` publishes
-  `ListingCancelled` (`ticket_id` topic, `owner`) (#116). `buy_resale`
-  publishes `TicketResold` (`ticket_id` topic, `seller`, `buyer`, `price`,
-  `royalty`) (#117). Rejected calls publish none of these.
+- Primary-sale platform fee: `set_platform_fee_bps` takes a fee in basis points
+  from each primary sale and pays it to the admin. The organizer receives the
+  rest, through escrow when the event uses it. `platform_fee_bps` reads it
+  (#104).
+- Timed resale auctions: `start_auction`, `place_bid`, `settle_auction` and
+  `get_auction`. Bids are escrowed, each bid refunds the bidder it displaces,
+  and the highest bid wins at settlement. Bids stay within the resale price cap.
+  While an auction runs, the ticket cannot be transferred, listed, sold at a
+  fixed price or gifted. `cancel_resale` withdraws an auction with no bids
+  (#105).
+- Resale offers: `make_offer` escrows a buyer's offer on a listed ticket, and
+  `accept_offer` settles it for the owner. `cancel_offer` lets the owner reject
+  an offer or lets the buyer withdraw it. `get_offer` reads it (#106).
+- Operator approvals: `approve`, `revoke_approval`, `get_approved` and
+  `transfer_from` let one operator per ticket move it on the owner's behalf.
+  Any change of owner clears the approval (#107).
 - Multi-use tickets (passes): `set_ticket_max_uses` sets how many entries a
   ticket allows (default 1). `check_in` and `check_in_batch` count each entry,
   and a ticket becomes `Used` only once its uses are exhausted. `pass_out`

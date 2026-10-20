@@ -141,19 +141,29 @@ pub enum Error {
     /// The sale window ends at or before it starts (issue #94).
     InvalidSaleWindow = 65,
     /// A gift claim already exists for the ticket and has not yet been claimed or expired.
-    GiftClaimAlreadyExists = 66,
-    /// The contract is currently paused by the admin.
-    ContractPaused = 67,
-    /// The refund window for this ticket has expired.
-    RefundWindowExpired = 68,
-    /// The ticket has already been refunded.
-    AlreadyRefunded = 69,
-    /// The wallet has reached its purchase limit for this event.
-    PurchaseLimitExceeded = 70,
-    /// The caller is not on the event's allowlist during presale.
-    NotOnAllowlist = 71,
-    /// The presale window has not started yet.
-    PresaleNotStarted = 72,
-    /// The presale window has ended.
-    PresaleEnded = 73,
+    GiftClaimAlreadyExists = 61,
+    /// The platform fee is above 100% (10_000 bps) (issue #104).
+    InvalidPlatformFee = 62,
+    /// No auction exists for the ticket (issue #105).
+    AuctionNotFound = 63,
+    /// The auction has closed, so bids are no longer accepted (issue #105).
+    AuctionEnded = 64,
+    /// The auction is still open and cannot be settled yet (issue #105).
+    AuctionNotEnded = 65,
+    /// The ticket has an open auction, so this operation is blocked until it settles (issue #105).
+    AuctionActive = 66,
+    /// The auction already has a bid and can no longer be cancelled (issue #105).
+    AuctionHasBids = 67,
+    /// The auction end is not in the future, or falls after resale closes (issue #105).
+    InvalidAuctionEnd = 68,
+    /// The bid does not beat the highest bid, or does not meet the reserve (issue #105).
+    BidTooLow = 69,
+    /// The buyer has no open offer on the ticket (issue #106).
+    OfferNotFound = 70,
+    /// The buyer already has an open offer on the ticket (issue #106).
+    OfferAlreadyExists = 71,
+    /// The spender is not the operator approved for the ticket (issue #107).
+    NotApproved = 72,
+    /// The payment token cannot change while resale bids or offers are held (issues #105, #106).
+    ResaleFundsOutstanding = 73,
 }

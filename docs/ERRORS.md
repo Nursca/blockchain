@@ -5,7 +5,7 @@ Every fallible entry point of the `ticketing` contract returns
 [`contracts/ticketing/src/error.rs`](../contracts/ticketing/src/error.rs)
 with an explicit `#[repr(u32)]` discriminant, so every variant has a
 **stable numeric code** that integrators can branch on. The enum runs
-from `1` to `34` with no gaps — code `0` is never produced by this
+from `1` to `73` — code `0` is never produced by this
 contract.
 
 This page is the canonical error reference. Where another document shows
@@ -87,6 +87,18 @@ diagnostic transaction.
 | 56 | `ReentryNotAllowed` | `pass_out` was called on an event with `max_reentries` of zero (issue #78) |
 | 57 | `ReentryLimitReached` | `pass_out` was called after the ticket used all of its re-entries (issue #78) |
 | 60 | `InvalidMaxUses` | `set_ticket_max_uses` was given zero, or a value below the ticket's recorded uses (issue #74) |
+| 62 | `InvalidPlatformFee` | `set_platform_fee_bps` was given a fee above 10_000 bps (issue #104) |
+| 63 | `AuctionNotFound` | `place_bid`, `settle_auction` or `get_auction` was called for a ticket with no open auction (issue #105) |
+| 64 | `AuctionEnded` | `place_bid` was called at or after the auction's `ends_at` (issue #105) |
+| 65 | `AuctionNotEnded` | `settle_auction` was called before the auction's `ends_at` (issue #105) |
+| 66 | `AuctionActive` | A transfer, fixed-price sale, listing, gift or offer was attempted on a ticket whose auction is still running (issue #105) |
+| 67 | `AuctionHasBids` | `cancel_resale` was called on an auction that already has a bid (issue #105) |
+| 68 | `InvalidAuctionEnd` | `start_auction` was given an `ends_at` that is not in the future or falls after the resale cutoff (issue #105) |
+| 69 | `BidTooLow` | A bid is below the reserve or does not beat the highest bid (issue #105) |
+| 70 | `OfferNotFound` | `accept_offer`, `cancel_offer` or `get_offer` was called for a buyer with no open offer on the ticket (issue #106) |
+| 71 | `OfferAlreadyExists` | `make_offer` was called by a buyer who already has an open offer on the ticket (issue #106) |
+| 72 | `NotApproved` | `transfer_from` was called by an address that is not the ticket's approved operator (issue #107) |
+| 73 | `ResaleFundsOutstanding` | `apply_payment_token` was called while resale bids or offers are still held (issues #105, #106) |
 
 ### Grouping
 
@@ -176,8 +188,8 @@ condition is **permanent** or **time/balance dependent**:
 
 | Class | Codes | Retry strategy |
 |---|---|---|
-| Permanent — fix the request | 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50, 51, 53, 54, 55, 56, 57 | Do not retry automatically; return a 4xx-equivalent to the caller |
-| Time-dependent — retry after waiting | 15, 16, 20, 21, 31, 52 | Retry when the relevant timestamp or ledger sequence has passed |
+| Permanent — fix the request | 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50, 51, 53, 54, 55, 56, 57, 62, 63, 67, 68, 69, 70, 71, 72 | Do not retry automatically; return a 4xx-equivalent to the caller |
+| Time-dependent — retry after waiting | 15, 16, 20, 21, 31, 52, 64, 65, 66, 73 | Retry when the relevant timestamp or ledger sequence has passed, or once the auction or offer has settled |
 | Transient operational | 1, 2, 14, 18 | Deployment or configuration error; retrying the same arguments will not help |
 
 Codes 14 and 18 are listed as operational rather than permanent because
