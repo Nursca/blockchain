@@ -17,10 +17,11 @@ pub use constants::{
 use constants::{LEDGER_BUMP, LEDGER_THRESHOLD};
 pub use error::Error;
 pub use events::{
-    AuctionSettled, AuctionStarted, BidPlaced, ContractInitialized, EventCancelled, OfferAccepted,
-    OfferCancelled, OfferMade, OrganizerApproved, OrganizerRevoked, PaymentTokenChanged,
-    PaymentTokenProposed, PlatformFeeUpdated, PurchaseThrottleUpdated, TicketCheckedIn,
-    TicketIssued, TicketTransferred,
+    AuctionSettled, AuctionStarted, BidPlaced, ContractInitialized, EventCancelled, EventCreated,
+    ListingCancelled, OfferAccepted, OfferCancelled, OfferMade, OrganizerApproved,
+    OrganizerRevoked, PaymentTokenChanged, PaymentTokenProposed, PlatformFeeUpdated, PrimarySale,
+    PurchaseThrottleUpdated, TicketCheckedIn, TicketIssued, TicketListed, TicketResold,
+    TicketTransferred,
 };
 pub use types::{
     Auction, Category, DataKey, Event, EventParams, GiftClaim, Offer, PendingPaymentToken,
@@ -987,6 +988,11 @@ impl TicketingContract {
         let ticket_id = Self::mint(&env, event_id, buyer.clone(), tier, seat, price);
         Self::increment_tickets_issued(&env, event_id, 1);
         Self::record_purchase(&env, &buyer);
+        // The wallet counter is what `enforce_wallet_limit` compares against
+        // `max_per_wallet`, so a sale has to be counted for the limit to bind.
+        // A refund (`refund_primary`) and a refunded revocation
+        // (`revoke_with_refund`) give the slot back.
+        Self::increment_wallet_purchase_count(&env, event_id, &buyer);
         PrimarySale {
             ticket_id,
             buyer,
@@ -1594,6 +1600,9 @@ impl TicketingContract {
                     .instance()
                     .set(&DataKey::OutstandingEscrow, &(current_escrow - ticket.original_price));
             }
+            // The refunded ticket no longer counts against the owner's
+            // `max_per_wallet` allowance.
+            Self::decrement_wallet_purchase_count(&env, ticket.event_id, &ticket.owner);
         }
         ticket.status = TicketStatus::Revoked;
         ticket.resale_price = 0;
@@ -1858,6 +1867,9 @@ impl TicketingContract {
         let token_address = Self::payment_token_for_event(&env, &event)?;
 
         // --- effects: settle state before any untrusted external call. ---
+        // The sale price is captured before the ticket is overwritten, so the
+        // published event carries the price the buyer actually paid.
+        let price = ticket.resale_price;
         let (royalty, seller_amount) = Self::split_resale_price(&event, ticket.resale_price)?;
         let seller = ticket.owner.clone();
         Self::move_owner_balance(&env, ticket_id, &seller, &buyer);
@@ -3493,10 +3505,13 @@ impl TicketingContract {
     fn enforce_presale_rules(env: &Env, event_id: u64, buyer: &Address, event: &Event) -> Result<(), Error> {
         if let (Some(presale_starts), Some(presale_ends)) = (event.presale_starts_at, event.presale_ends_at) {
             let now = env.ledger().timestamp();
-            if now >= presale_starts && now < presale_ends {
-                if !env.storage().persistent().has(&DataKey::AllowlistMember(event_id, buyer.clone())) {
-                    return Err(Error::NotOnAllowlist);
-                }
+            let in_presale = now >= presale_starts && now < presale_ends;
+            let on_allowlist = env
+                .storage()
+                .persistent()
+                .has(&DataKey::AllowlistMember(event_id, buyer.clone()));
+            if in_presale && !on_allowlist {
+                return Err(Error::NotOnAllowlist);
             }
         }
         Ok(())
