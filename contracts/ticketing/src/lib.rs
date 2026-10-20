@@ -990,6 +990,10 @@ impl TicketingContract {
         let ticket_id = Self::mint(&env, event_id, buyer.clone(), tier, seat, price);
         Self::increment_tickets_issued(&env, event_id, 1);
         Self::record_purchase(&env, &buyer);
+        // The wallet counter is what `enforce_wallet_limit` compares against
+        // `max_per_wallet`, so a sale has to be counted for the limit to bind.
+        // A refund (`refund_primary`) and a refunded revocation
+        // (`revoke_with_refund`) give the slot back.
         Self::increment_wallet_purchase_count(&env, event_id, &buyer);
         PrimarySale {
             ticket_id,
@@ -1600,6 +1604,9 @@ impl TicketingContract {
                     &(current_escrow - ticket.original_price),
                 );
             }
+            // The refunded ticket no longer counts against the owner's
+            // `max_per_wallet` allowance.
+            Self::decrement_wallet_purchase_count(&env, ticket.event_id, &ticket.owner);
         }
         ticket.status = TicketStatus::Revoked;
         ticket.resale_price = 0;
@@ -1866,6 +1873,9 @@ impl TicketingContract {
         let token_address = Self::payment_token_for_event(&env, &event)?;
 
         // --- effects: settle state before any untrusted external call. ---
+        // The sale price is captured before the ticket is overwritten, so the
+        // published event carries the price the buyer actually paid.
+        let price = ticket.resale_price;
         let (royalty, seller_amount) = Self::split_resale_price(&event, ticket.resale_price)?;
         let price = ticket.resale_price;
         let seller = ticket.owner.clone();
@@ -3530,6 +3540,12 @@ impl TicketingContract {
                     .persistent()
                     .has(&DataKey::AllowlistMember(event_id, buyer.clone()))
             {
+            let in_presale = now >= presale_starts && now < presale_ends;
+            let on_allowlist = env
+                .storage()
+                .persistent()
+                .has(&DataKey::AllowlistMember(event_id, buyer.clone()));
+            if in_presale && !on_allowlist {
                 return Err(Error::NotOnAllowlist);
             }
         }
