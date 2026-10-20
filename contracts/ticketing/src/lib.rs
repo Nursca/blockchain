@@ -17,8 +17,10 @@ pub use constants::{
 use constants::{LEDGER_BUMP, LEDGER_THRESHOLD};
 pub use error::Error;
 pub use events::{
-    ContractInitialized, EventCancelled, OrganizerApproved, OrganizerRevoked, PaymentTokenChanged,
-    PaymentTokenProposed, PurchaseThrottleUpdated, TicketCheckedIn, TicketIssued, TicketTransferred,
+    ContractInitialized, EventCancelled, EventCreated, ListingCancelled, OrganizerApproved,
+    OrganizerRevoked, PaymentTokenChanged, PaymentTokenProposed, PrimarySale,
+    PurchaseThrottleUpdated, TicketCheckedIn, TicketIssued, TicketListed, TicketResold,
+    TicketTransferred,
 };
 pub use types::{
     Category, DataKey, Event, EventParams, GiftClaim, PendingPaymentToken, StoredTicket, Ticket,
@@ -330,6 +332,11 @@ impl TicketingContract {
             LEDGER_BUMP,
         );
         Self::index_organizer_event(&env, &event.organizer, event_id);
+        EventCreated {
+            organizer: event.organizer,
+            event_id,
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -962,7 +969,16 @@ impl TicketingContract {
         let ticket_id = Self::mint(&env, event_id, buyer.clone(), tier, seat, price);
         Self::increment_tickets_issued(&env, event_id, 1);
         Self::record_purchase(&env, &buyer);
-        Self::increment_wallet_purchase_count(&env, event_id, &buyer);
+        PrimarySale {
+            ticket_id,
+            buyer,
+            price,
+        }
+        .publish(&env);
+        // `event` is a local copy, so the escrowed credit has to be written
+        // back explicitly. Without this the running total is discarded:
+        // `escrow_balance` stays at 0 in storage, `release_escrow` reads 0,
+        // and every escrowed sale is stranded in the contract forever.
         if event.escrow_balance > 0 {
             Self::save_event(&env, event_id, &event);
         }
@@ -1682,6 +1698,12 @@ impl TicketingContract {
         ticket.resale_price = price;
         Self::remove_gift_claim(&env, ticket_id);
         Self::save_ticket(&env, ticket_id, &ticket);
+        TicketListed {
+            ticket_id,
+            owner,
+            price,
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -1736,6 +1758,7 @@ impl TicketingContract {
         ticket.status = TicketStatus::Valid;
         ticket.resale_price = 0;
         Self::save_ticket(&env, ticket_id, &ticket);
+        ListingCancelled { ticket_id, owner }.publish(&env);
         Ok(())
     }
 
@@ -1803,6 +1826,7 @@ impl TicketingContract {
         let token_address = Self::payment_token_for_event(&env, &event)?;
 
         // --- effects: settle state before any untrusted external call. ---
+        let price = ticket.resale_price;
         let royalty_product = ticket
             .resale_price
             .checked_mul(event.royalty_bps as i128)
@@ -1826,6 +1850,14 @@ impl TicketingContract {
         if seller_amount > 0 {
             token_client.transfer(&buyer, &seller, &seller_amount);
         }
+        TicketResold {
+            ticket_id,
+            seller,
+            buyer,
+            price,
+            royalty,
+        }
+        .publish(&env);
         Ok(())
     }
 
