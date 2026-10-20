@@ -24,6 +24,7 @@ mod cancel_event;
 mod capacity;
 mod check_in_window;
 mod checkin_signers;
+mod escrow;
 mod event_created;
 mod event_labels;
 mod events;
